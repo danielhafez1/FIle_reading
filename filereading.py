@@ -59,23 +59,42 @@ if __name__ == "__main__":
 
 try:
 	sourceSequence = options.p2
-	Vgene = options.p3
-	Jgene = options.p4
-
 except:
 	print('No source sequence because no Same VJ required in the arguments')
 
-df = pd.read_csv(filename,low_memory=False)
-df = df.rename(columns={'subject.diagnosis' : 'subject_diagnosis'})
-### Remove the word junction from some rows because of the merge between all csv files
-#df = df[~df.junction_aa.str.contains("junction_aa")]
-# Remove non floating type because of the error you get when you do (if label in)
-#df = df.loc[df.subject_diagnosis.apply(type) != float]
-print('\n {0}'.format(df.shape))
-### Remove duplicates
-#df = df.drop_duplicates(keep = 'first')
+try:
+	Vgene = options.p3
+except:
+	print('No V gene required in the arguments')
 
-#print('Shape after dropping all duplicated rows in the initial Dataframe: {0} \n'.format(df.shape))
+try:
+	Jgene = options.p4
+except:
+	print('No J gene required in the arguments')
+
+
+df1 = pd.read_csv(filename,low_memory=False)
+print('\n {0}'.format(df1.shape))
+df1 = df1.rename(columns={'subject.diagnosis' : 'subject_diagnosis'})
+df1 = df1.rename(columns={'subject.subject_id' : 'subject_subject_id'})
+df1 = df1.rename(columns={'v_gene' : 'v_gene_old'})
+df1 = df1.rename(columns={'j_gene' : 'j_gene_old'})
+
+aaa =df1.assign(v_gene=df1['v_gene_old'].str.split(', or ')).explode('v_gene')
+
+aaa =aaa.assign(j_gene=df1['j_gene_old'].str.split(', or ')).explode('j_gene')
+
+
+df = aaa.drop_duplicates(subset =['subject_subject_id', 'junction_aa', 'v_gene', 'j_gene'])
+
+patients = df
+patients = patients.drop_duplicates(subset =[ "subject_subject_id"])
+print('\n There are {0} different patients'.format(patients.shape[0]))
+
+print('Dropping clonotype duplicates')
+df = df.drop_duplicates(subset =[ "subject_subject_id","junction_aa","v_gene","j_gene"])
+
+print('\n {0}'.format(df.shape))
 
 z = []
 
@@ -98,6 +117,7 @@ all_locus = []
 all_ids = []
 all_vgene = []
 all_jgene = []
+all_patients = []
 
 
 for i in (df['locus']):
@@ -108,6 +128,16 @@ for i in (df['locus']):
     else:
         locus_stat = i
         all_locus.append(locus_stat)
+
+
+for i in df['subject_subject_id']:
+	if not i:
+		id_subject = "None"
+		all_patients.append(id_subject)
+
+	else:
+		id_subject = i
+		all_patients.append(id_subject)
 
 
 
@@ -193,7 +223,8 @@ for index,i in enumerate(df['sample']):
 	except:
 		all_phenotype[index] = "None"
 
-stat_dataframe = pd.DataFrame({'Junction': all_junction,'locus': all_locus,'cell_ID': all_ids,'Disease': all_disease,'Phenotype': all_phenotype,'V_Gene': all_vgene,'J_Gene':all_jgene})
+
+stat_dataframe = pd.DataFrame({'Junction': all_junction,'locus': all_locus,'cell_ID': all_ids,'Disease': all_disease,'Phenotype': all_phenotype,'V_Gene': all_vgene,'J_Gene':all_jgene,'Patients': all_patients})
 
 
 
@@ -211,8 +242,7 @@ if options.paired_sequencing:
 				paired_sequences[index] = paired
 
 
-stat_dataframe = pd.DataFrame({'Junction': all_junction,'locus': all_locus,'cell_ID': all_ids,'Paired':paired_sequences,'Disease': all_disease,'V_Gene': all_vgene,'J_Gene':all_jgene,'Phenotype': all_phenotype})
-
+stat_dataframe = pd.DataFrame({'Junction': all_junction,'locus': all_locus,'cell_ID': all_ids,'Paired':paired_sequences,'Disease': all_disease,'V_Gene': all_vgene,'J_Gene':all_jgene,'Phenotype': all_phenotype,'Patients': all_patients})
 
 print("\n Dataframe dimensions are : ",stat_dataframe.shape)
 
@@ -225,7 +255,6 @@ if options.same_VJ:
 	source_jgene = stat_dataframe[stat_dataframe['Junction']=='{0}'.format(sourceSequence)]['J_Gene']
 	
 	source_vgene = stat_dataframe[stat_dataframe['Junction']=='{0}'.format(sourceSequence)]['V_Gene']
-
 	
 	source_jgenelist = list(source_jgene)
 	source_vgenelist = list(source_vgene)
@@ -281,22 +310,30 @@ if options.same_VJ:
 
 	print(all_possible_jgene)
 
-	sameV_df = stat_dataframe[stat_dataframe['V_Gene'].str.contains(Vgene,case=False,na=True)]
-	sameV_df = sameV_df[sameV_df['V_Gene'].notna()]
+	if not all_possible_vgene:
+		print("THE SOURCE SEQUENCE MIGHT NOT EXIST IN THE MASTER LIST FILE !")
+
+	if not all_possible_vgene:
+		print("THE SOURCE SEQUENCE MIGHT NOT EXIST IN THE MASTER LIST FILE !")	
 	
 
-	print("Dataframe shape after V only gene haircut {0}".format(sameV_df.shape))
-	
-	sameVJ_df = sameV_df[sameV_df['J_Gene'].str.contains(Jgene,case=False,na=True)]
-	sameVJ_df = sameVJ_df[sameVJ_df['J_Gene'].notna()]
+	if options.p3:
 
-	print("Dataframe shape after VJ gene haircut {0}".format(sameVJ_df.shape))
-
+		sameVJ_df = stat_dataframe[stat_dataframe['V_Gene'].str.contains("{0}$".format(Vgene),case=False,na=True)]
+		sameVJ_df = sameVJ_df[sameVJ_df['V_Gene'].notna()]
+		print("Dataframe shape after V only gene haircut {0}".format(sameVJ_df.shape))	
 
 
+	if options.p4:
+		if not options.p3:
+			sameVJ_df = stat_dataframe
+		sameVJ_df = sameVJ_df[sameVJ_df['J_Gene'].str.contains("{0}$".format(Jgene),case=False,na=True)]
+		sameVJ_df = sameVJ_df[sameVJ_df['J_Gene'].notna()]
+		print("Dataframe shape after J gene haircut {0}".format(sameVJ_df.shape))
 
 
-	with open('{file_path}/Disease_sameVJ_I-receptor_{chain_type}.csv'.format(file_path = folder_name,chain_type = Chain), 'w', newline= '') as csvfile:
+
+	with open('{file_path}/Disease_{v_gene}_{j_gene}_{chain_type}.csv'.format(file_path = folder_name,v_gene = options.p3,j_gene = options.p4,chain_type = Chain), 'w', newline= '') as csvfile:
 	
 		fieldnames = [ 'Disease','Junction', 'Total_hits','Hits_CD4','Hits_CD8','TRA_hits','TRB_hits','Paired']
 	
@@ -306,6 +343,7 @@ if options.same_VJ:
 	
 	
 		for diseases in set(all_disease):
+			
 	
 			count_sequences_disease = sameVJ_df[sameVJ_df['Disease'] == diseases].count()
 	
@@ -357,17 +395,19 @@ if options.same_VJ:
 	
 		thewriter.writerow({'Disease':"\t"})
 		
-		with open('{file_path}/General_SameVJ_I-receptor_{chain_type}.csv'.format(file_path = folder_name,chain_type = Chain), 'w', newline= '') as csvfile:
+		with open('{file_path}/General_{v_gene}_{j_gene}_{chain_type}.csv'.format(file_path = folder_name,v_gene = options.p3,j_gene = options.p4,chain_type = Chain), 'w', newline= '') as csvfile:
 
 
-			fieldnames_1 = [ 'Sequence', 'All_hits','CD4_count','CD8_count']
+			fieldnames_1 = [ 'Sequence', 'All_hits','CD4_count','CD8_count','Patients']
 			thewriter = csv.DictWriter(csvfile, fieldnames=fieldnames_1)
 			thewriter.writeheader()
 			for j in set(sameVJ_df['Junction']):
 				junction_occurrences_1 = len(sameVJ_df[(sameVJ_df['Junction']==j)])
 				CD4 = len(sameVJ_df[(sameVJ_df['Junction'] == j) & (sameVJ_df['Phenotype'] == "CD4-positive")])
 				CD8 = len(sameVJ_df[(sameVJ_df['Junction'] == j) & (sameVJ_df['Phenotype'] == "CD8-positive")])
-				thewriter.writerow({ 'Sequence': j,'All_hits': junction_occurrences_1, 'CD4_count': CD4, 'CD8_count': CD8})
+				ww =((sameVJ_df[(sameVJ_df['Junction']==j)]))
+				patients = len(set(ww.Patients))
+				thewriter.writerow({ 'Sequence': j,'All_hits': junction_occurrences_1, 'CD4_count': CD4, 'CD8_count': CD8, 'Patients': patients})
 
 
 else:
@@ -436,14 +476,17 @@ else:
 
 
 
-			fieldnames_1 = [ 'Sequence', 'All_hits','CD4_count','CD8_count']
+			fieldnames_1 = [ 'Sequence', 'All_hits','CD4_count','CD8_count','Patients']
 			thewriter = csv.DictWriter(csvfile, fieldnames=fieldnames_1)
 			thewriter.writeheader()
-			for j in set(stat_dataframe['Junction']):
-				junction_occurrences_1 = len(stat_dataframe[(stat_dataframe['Junction']==j)])
-				CD4 = len(stat_dataframe[(stat_dataframe['Junction'] == j) & (stat_dataframe['Phenotype'] == "CD4-positive")])
-				CD8 = len(stat_dataframe[(stat_dataframe['Junction'] == j) & (stat_dataframe['Phenotype'] == "CD8-positive")])
-				thewriter.writerow({ 'Sequence': j,'All_hits': junction_occurrences_1, 'CD4_count': CD4, 'CD8_count': CD8})
+			sameVJ_df = stat_dataframe
+			for j in set(sameVJ_df['Junction']):
+				junction_occurrences_1 = len(sameVJ_df[(sameVJ_df['Junction']==j)])
+				CD4 = len(sameVJ_df[(sameVJ_df['Junction'] == j) & (sameVJ_df['Phenotype'] == "CD4-positive")])
+				CD8 = len(sameVJ_df[(sameVJ_df['Junction'] == j) & (sameVJ_df['Phenotype'] == "CD8-positive")])
+				ww =((sameVJ_df[(sameVJ_df['Junction']==j)]))
+				patients = len(set(ww.Patients))
+				thewriter.writerow({ 'Sequence': j,'All_hits': junction_occurrences_1, 'CD4_count': CD4, 'CD8_count': CD8, 'Patients': patients})
 
 
 		
